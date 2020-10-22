@@ -28,6 +28,7 @@ public:
 
     std::shared_ptr<CLContext> GetCLContext() const;
     std::shared_ptr<CLKernel>  GetCLKernel()  const;
+    std::shared_ptr<Camera>     m_Camera;
 
 private:
     void InitGL();
@@ -47,7 +48,6 @@ private:
     // Kernels
     std::shared_ptr<CLKernel>   m_RenderKernel;
     // Scene
-    std::shared_ptr<Camera>     m_Camera;
     std::shared_ptr<Scene>      m_Scene;
     std::shared_ptr<Viewport>   m_Viewport;
     // Buffers

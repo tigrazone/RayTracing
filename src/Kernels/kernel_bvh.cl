@@ -322,8 +322,10 @@ float3 SampleSky(__read_only image2d_t tex, float3 dir)
     const sampler_t smp = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_LINEAR;
 
     // Convert (normalized) dir to spherical coordinates.
-    float2 coords = (float2)(atan2(dir.x, dir.y) + PI, acos(dir.z)* INV_PI);
-    coords.x = (coords.x < 0.0f ? coords.x + TWO_PI : coords.x) * INV_TWO_PI;
+    float2 coords = (float2)(atan2(dir.x, dir.y) * INV_TWO_PI + 0.5f, acos(dir.z)* INV_PI);
+    if (coords.x < 0.0f) {
+		coords.x += 1.0f;
+	}
 	/*
     coords.x *= INV_TWO_PI;
     coords.y *= INV_PI;
