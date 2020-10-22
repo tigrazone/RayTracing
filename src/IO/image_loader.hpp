@@ -12,7 +12,7 @@ public:
 class HDRLoader
 {
 public:
-    static bool Load(const char *fileName, Image &res);
+    static bool Load(const char *fileName, Image &res, float scale=1.0f);
 };
 
 #endif // IMAGE_LOADER_HPP

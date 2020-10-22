@@ -4,6 +4,8 @@
 #define PI 3.14159265359f
 #define TWO_PI 6.28318530718f
 #define INV_PI 0.31830988618f
+#define INV_PI_PI 0.6366197723675813f
+#define PI_180 0.01745329251994f
 #define INV_TWO_PI 0.15915494309f
 
 typedef struct
@@ -34,7 +36,7 @@ typedef struct
 
 Ray InitRay(float3 origin, float3 dir)
 {
-    dir = normalize(dir);
+    // dir = normalize(dir);
 
     Ray r;
     r.origin = origin;
@@ -73,89 +75,41 @@ float GetRandomFloat(unsigned int* seed)
     return (float)(*seed) * 2.3283064365386963e-10f;
 }
 
-float3 reflect(float3 v, float3 n)
+float3 reflect(float3 v, float3 n, float dott)
 {
-    return -v + 2.0f * dot(v, n) * n;
+    return -v + dott * (n + n);
 }
+
 
 float3 SampleHemisphereCosine(float3 n, unsigned int* seed)
-{
+{	
     float phi = TWO_PI * GetRandomFloat(seed);
-    float sinThetaSqr = GetRandomFloat(seed);
-    float sinTheta = sqrt(sinThetaSqr);
+    float sinTheta2 = GetRandomFloat(seed);
+    float sinTheta = native_sqrt(sinTheta2);
+	
+	float sincos_c, a, b;
+	float sincos_s = sincos(phi, &sincos_c);
+		
+    float x = sincos_c * sinTheta;
+    float y = sincos_s * sinTheta;
+    float z = native_sqrt(1.f - sinTheta2);
+	
+	float3 t, s, wo;
+	
+	int sign = (n.z < 0.0f)* 2 -1;
+	
+	
+		a = 1.0f / (1.0f - sign * n.z);
+		b = sign * n.x * n.y * a;	
+	
+	wo.x = x * (1.0f - n.x * n.x * a) + y * b + z * n.x;
+    wo.y = sign * ( y * (n.y * n.y * a - 1.0f) - x * b) +  + z * n.y;
+    wo.z = sign * x * n.x - y * n.y + z * n.z;
 
-    float3 axis = fabs(n.x) > 0.001f ? (float3)(0.0f, 1.0f, 0.0f) : (float3)(1.0f, 0.0f, 0.0f);
-    float3 t = normalize(cross(axis, n));
-    float3 s = cross(n, t);
-
-    return normalize(s*cos(phi)*sinTheta + t*sin(phi)*sinTheta + n*sqrt(1.0f - sinThetaSqr));
+    return wo;
 }
 
-#define ALGORITHM2
 
-#ifdef ALGORITHM1
-bool RayTriangle(const __global Triangle* triangle, const Ray* r, float* t, float3* n)
-{
-    // Vertices
-    float3 A = triangle->p1;
-    float3 B = triangle->p2;
-    float3 C = triangle->p3;
-
-    // Figure out triangle plane
-    float3 triangle_ab = B - A;
-    float3 triangle_ac = C - A;
-    float3 triangle_nn = cross(triangle_ab, triangle_ac);
-    float3 triangle_n = normalize(triangle_nn);
-    float triangle_support = dot(A, triangle_n);
-
-    // Compute intersection distance, bail if infinite or negative
-    float intersection_det = dot(triangle_n, r->dir);
-    if(fabs(intersection_det) <= 0.0001f) {
-        return false;
-    }
-    float intersection_dist = (triangle_support - dot(triangle_n, r->origin)) / intersection_det;
-    if(intersection_dist <= 0.0f)
-    {
-        return false;
-    }
-
-    // Compute intersection point
-    float3 Q = r->origin + r->dir * intersection_dist;
-
-    // Test inside-ness
-    float3 triangle_bc = C - B;
-    float3 triangle_ca = A - C;
-    float3 triangle_aq = Q - A;
-    float3 triangle_bq = Q - B;
-    float3 triangle_cq = Q - C;
-
-    float baryA = dot(cross(triangle_bc, triangle_bq), triangle_n);
-    float baryB = dot(cross(triangle_ca, triangle_cq), triangle_n);
-    float baryC = dot(cross(triangle_ab, triangle_aq), triangle_n);
-
-    if(baryA < 0.0f || baryB < 0.0f || baryC < 0.0f)
-    {
-        return false;
-    }
-    
-    // Perform barycentric interpolation of normals
-    float triangle_den = dot(triangle_nn, triangle_n);
-    baryA /= triangle_den;
-    baryB /= triangle_den;
-    baryC /= triangle_den;
-
-    float3 N = normalize(
-        triangle->n1 * baryA + 
-        triangle->n2 * baryB + 
-        triangle->n3 * baryC
-    );
-    *t = intersection_dist;
-    *n = N;
-
-    return true;
-}
-
-#else
 bool RayTriangle(const Ray* r, const __global Triangle* triangle, IntersectData* isect)
 {
     float3 e1 = triangle->v2.position - triangle->v1.position;
@@ -163,6 +117,7 @@ bool RayTriangle(const Ray* r, const __global Triangle* triangle, IntersectData*
     // Calculate planes normal vector
     float3 pvec = cross(r->dir, e2);
     float det = dot(e1, pvec);
+	//9*
 
     // Ray is parallel to plane
     if (det < 1e-8f || -det > 1e-8f)
@@ -172,6 +127,8 @@ bool RayTriangle(const Ray* r, const __global Triangle* triangle, IntersectData*
     float inv_det = 1.0f / det;
     float3 tvec = r->origin - triangle->v1.position;
     float u = dot(tvec, pvec) * inv_det;
+	
+	//1/ 4*   13* 1/
     if (u < 0.0f || u > 1.0f)
     {
         return false;
@@ -179,6 +136,8 @@ bool RayTriangle(const Ray* r, const __global Triangle* triangle, IntersectData*
 
     float3 qvec = cross(tvec, e1);
     float v = dot(r->dir, qvec) * inv_det;
+	
+	//10*    23* 1/
     if (v < 0.0f || u + v > 1.0f)
     {
         return false;
@@ -186,19 +145,104 @@ bool RayTriangle(const Ray* r, const __global Triangle* triangle, IntersectData*
 
     float t = dot(e2, qvec) * inv_det;
 
+	//4*    27* 1/
     if (t < isect->t)
     {
         isect->hit = true;
         isect->t = t;
         isect->pos = isect->ray.origin + isect->ray.dir * t;
         isect->object = triangle;
-        isect->normal = normalize(u * triangle->v2.normal + v * triangle->v3.normal + (1.0f - u - v) * triangle->v1.normal);
+        isect->normal = // normalize
+		(u * triangle->v2.normal + v * triangle->v3.normal + (1.0f - u - v) * triangle->v1.normal);
         isect->texcoord = u * triangle->v2.texcoord + v * triangle->v3.texcoord + (1.0f - u - v) * triangle->v1.texcoord;
     }
 
     return true;
 }
-#endif
+
+/*
+bool RayTriangle(const Ray* r, const __global Triangle* triangle, IntersectData* isect)
+{
+    float3 absRay = fabs(r->dir);
+	int kz;
+	if(absRay.x > absRay.y) {
+		if(absRay.x > absRay.z) {
+			kz = 0;
+		} else {
+			kz = 2;
+		}
+	} else {
+		if(absRay.y > absRay.z) {
+			kz = 1;
+		} else {
+			kz = 2;
+		}
+	}
+	
+	int kx = kz+1; if(kx == 3) kx=0;
+	int ky = kx+1; if(ky == 3) ky=0;
+	
+	float rd[3]= {r->dir.x, r->dir.y, r->dir.z};
+	
+	float Sz = 1.0f / rd[kz];
+	float Sx = rd[kx]*Sz;
+	float Sy = rd[ky]*Sz;
+	
+	float A[3] = {triangle->v1.position.x - r->origin.x, triangle->v1.position.y - r->origin.y, triangle->v1.position.z - r->origin.z};
+	float B[3] = {triangle->v2.position.x - r->origin.x, triangle->v2.position.y - r->origin.y, triangle->v2.position.z - r->origin.z};
+	float C[3] = {triangle->v3.position.x - r->origin.x, triangle->v3.position.y - r->origin.y, triangle->v3.position.z - r->origin.z};
+	
+	//6*
+	float Ax = A[kx] - Sx*A[kz];
+	float Ay = A[ky] - Sy*A[kz];
+	float Bx = B[kx] - Sx*B[kz];
+	float By = B[ky] - Sy*B[kz];
+	float Cx = C[kx] - Sx*C[kz];
+	float Cy = C[ky] - Sy*C[kz];
+	
+	
+	float U = Cx*By - Cy*Bx;
+	if(U < 0.0f) return false;
+	
+	float V = Ax*Cy - Ay*Cx;
+	if(V < 0.0f) return false;
+	
+	float W = Bx*Ay - By*Ax;
+	if(W < 0.0f) return false;
+	
+	//12*
+	float det = U + V + W;
+	
+	//float Az = Sz*A[kz];
+	//float Bz = Sz*B[kz];
+	//float Cz = Sz*C[kz];
+	
+	float T = Sz*(U*A[kz] + V*B[kz] + W*C[kz]);
+	//16*
+	
+	if(T<0.0f || T >isect->t*det)
+    {
+        return false;
+    }
+	
+	float inv_det = 1.0f / det;
+	float t = T*inv_det;
+	float u = U*inv_det;
+	float v = V*inv_det;
+	float w = W*inv_det;
+	//20* 1/
+
+        isect->hit = true;
+        isect->t = t;
+        isect->pos = isect->ray.origin + isect->ray.dir * t;
+        isect->object = triangle;
+        isect->normal = // normalize
+		(u * triangle->v2.normal + v * triangle->v3.normal + w * triangle->v1.normal);
+        isect->texcoord = u * triangle->v2.texcoord + v * triangle->v3.texcoord + w * triangle->v1.texcoord;
+		
+    return true;
+}
+*/
 
 
 bool RayBounds(const __global Bounds3* bounds, const Ray* ray, float t)
@@ -242,7 +286,7 @@ IntersectData Intersect(Ray *ray, const Scene* scene)
                     RayTriangle(ray, &scene->triangles[node->offset + i], &isect);
                 }
 
-                if (toVisitOffset == 0) break;
+                if (!toVisitOffset) break;
                 currentNodeIndex = nodesToVisit[--toVisitOffset];
             }
             else
@@ -262,7 +306,7 @@ IntersectData Intersect(Ray *ray, const Scene* scene)
         }
         else
         {
-            if (toVisitOffset == 0) break;
+            if (!toVisitOffset) break;
             currentNodeIndex = nodesToVisit[--toVisitOffset];
         }
     }
@@ -270,130 +314,204 @@ IntersectData Intersect(Ray *ray, const Scene* scene)
     return isect;
 }
 
+//#define smp ((sampler_t)(CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_LINEAR))
+
 float3 SampleSky(__read_only image2d_t tex, float3 dir)
 {
     //return 0.0f;
     const sampler_t smp = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_LINEAR;
 
     // Convert (normalized) dir to spherical coordinates.
-    float2 coords = (float2)(atan2(dir.x, dir.y) + PI, acos(dir.z));
-    coords.x = coords.x < 0.0f ? coords.x + TWO_PI : coords.x;
+    float2 coords = (float2)(atan2(dir.x, dir.y) + PI, acos(dir.z)* INV_PI);
+    coords.x = (coords.x < 0.0f ? coords.x + TWO_PI : coords.x) * INV_TWO_PI;
+	/*
     coords.x *= INV_TWO_PI;
     coords.y *= INV_PI;
-
+*/
     return read_imagef(tex, smp, coords).xyz;
 
 }
 
-float3 saturate(float3 value)
-{
-    return min(max(value, 0.0f), 1.0f);
-}
-
-
-float DistributionBlinn(float3 normal, float3 wh, float alpha)
-{
-    return (alpha + 2.0f) * pow(max(0.0f, dot(normal, wh)), alpha) * INV_TWO_PI;    
-}
-
-float DistributionBeckmann(float3 normal, float3 wh, float alpha)
-{
-    float cosTheta2 = dot(normal, wh);
-    cosTheta2 *= cosTheta2;
-    float alpha2 = alpha*alpha;
-
-    return exp(-(1.0f / cosTheta2 - 1.0f) / alpha2) * INV_PI / (alpha2 * cosTheta2 * cosTheta2);
-}
-
 float DistributionGGX(float cosTheta, float alpha)
 {
-    float alpha2 = alpha*alpha;
-    return alpha2 * INV_PI / pow(cosTheta * cosTheta * (alpha2 - 1.0f) + 1.0f, 2.0f);
-}
-
-float3 SampleBlinn(float3 n, float alpha, unsigned int* seed)
-{
-    float phi = TWO_PI * GetRandomFloat(seed);
-    float cosTheta = pow(GetRandomFloat(seed), 1.0f / (alpha + 1.0f));
-    float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
-
-    float3 axis = fabs(n.x) > 0.001f ? (float3)(0.0f, 1.0f, 0.0f) : (float3)(1.0f, 0.0f, 0.0f);
-    float3 t = normalize(cross(axis, n));
-    float3 s = cross(n, t);
-
-    return normalize(s*cos(phi)*sinTheta + t*sin(phi)*sinTheta + n*cosTheta);
-
-}
-
-float3 SampleBeckmann(float3 n, float alpha, unsigned int* seed)
-{
-    float phi = TWO_PI * GetRandomFloat(seed);
-    float cosTheta = sqrt(1.0f / (1.0f - alpha * alpha * log(GetRandomFloat(seed))));
-    float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
-
-    float3 axis = fabs(n.x) > 0.001f ? (float3)(0.0f, 1.0f, 0.0f) : (float3)(1.0f, 0.0f, 0.0f);
-    float3 t = normalize(cross(axis, n));
-    float3 s = cross(n, t);
-
-    return normalize(s*cos(phi)*sinTheta + t*sin(phi)*sinTheta + n*cosTheta);
-
+    const float alpha2 = alpha*alpha;
+	const float zzz = cosTheta * cosTheta * (alpha2 - 1.0f) + 1.0f;
+    return alpha2 * INV_PI / (zzz * zzz);
 }
 
 float3 SampleGGX(float3 n, float alpha, float* cosTheta, unsigned int* seed)
 {
-    float phi = TWO_PI * GetRandomFloat(seed);
+    //float phi = TWO_PI * GetRandomFloat(seed);
     float xi = GetRandomFloat(seed);
-    *cosTheta = sqrt((1.0f - xi) / (xi * (alpha * alpha - 1.0f) + 1.0f));
-    float sinTheta = sqrt(max(0.0f, 1.0f - (*cosTheta) * (*cosTheta)));
+    float cosTheta2 = (1.0f - xi) / (xi * (alpha * alpha - 1.0f) + 1.0f);
+    *cosTheta = native_sqrt(cosTheta2);
+    float sinTheta = native_sqrt(1.0f - cosTheta2);
+		
+	float sincos_c, a, b;
+	float sincos_s = sincos(TWO_PI * GetRandomFloat(seed), &sincos_c);
+		
+    float x = sincos_c * sinTheta;
+    float y = sincos_s * sinTheta;
+    float z = *cosTheta;
+	
+	float3 t, s, wo;
+	
+	int sign = (n.z < 0.0f)* 2 -1;
+	
+	
+		a = 1.0f / (1.0f - sign * n.z);
+		b = sign * n.x * n.y * a;
+	
+	wo.x = x * (1.0f - n.x * n.x * a) + y * b + z * n.x;
+    wo.y = sign * ( y * (n.y * n.y * a - 1.0f) - x * b) +  + z * n.y;
+    wo.z = sign * x * n.x - y * n.y + z * n.z;
 
-    float3 axis = fabs(n.x) > 0.001f ? (float3)(0.0f, 1.0f, 0.0f) : (float3)(1.0f, 0.0f, 0.0f);
-    float3 t = normalize(cross(axis, n));
-    float3 s = cross(n, t);
-
-    return normalize(s*cos(phi)*sinTheta + t*sin(phi)*sinTheta + n*(*cosTheta));;
+    return wo;
+	
+	/*	
+    float phi = TWO_PI * GetRandomFloat(seed);
+    float sinTheta2 = GetRandomFloat(seed);
+    float sinTheta = native_sqrt(sinTheta2);
+	
+	float sincos_c, a, b;
+	float sincos_s = sincos(phi, &sincos_c);
+		
+    float x = sincos_c * sinTheta;
+    float y = sincos_s * sinTheta;
+    float z = native_sqrt(1.f - sinTheta2);
+	
+	float3 t, s, wo;
+	
+	int sign = (n.z < 0.0f)* 2 -1;
+	
+	
+		a = 1.0f / (1.0f - sign * n.z);
+		b = sign * n.x * n.y * a;	
+	
+	wo.x = x * (1.0f - n.x * n.x * a) + y * b + z * n.x;
+    wo.y = sign * ( y * (n.y * n.y * a - 1.0f) - x * b) +  + z * n.y;
+    wo.z = sign * x * n.x - y * n.y + z * n.z;
+	*/
 }
 
+
+//3* -> 1*
+float DistributionGGX1(float cosTheta2, float alpha2)
+{
+	const float zzz = cosTheta2 * alpha2 + 1.0f;
+    return (1.0f + alpha2) * INV_PI / (zzz * zzz);
+}
+
+float3 SampleGGX1(float3 n, float alpha2, float* cosTheta, float* cosTheta2, unsigned int* seed)
+{
+    //float phi = TWO_PI * GetRandomFloat(seed);
+    float xi = GetRandomFloat(seed);
+    *cosTheta2 = (1.0f - xi) / (xi * alpha2 + 1.0f);
+    *cosTheta = native_sqrt(*cosTheta2);
+    float sinTheta = native_sqrt(1.0f - *cosTheta2);
+		
+	float sincos_c, a, b;
+	float sincos_s = sincos(TWO_PI * GetRandomFloat(seed), &sincos_c);
+		
+    float x = sincos_c * sinTheta;
+    float y = sincos_s * sinTheta;
+    float z = *cosTheta;
+	
+	float3 t, s, wo;
+	
+	int sign = (n.z < 0.0f)* 2 -1;
+	
+	
+		a = 1.0f / (1.0f - sign * n.z);
+		b = sign * n.x * n.y * a;
+	
+	wo.x = x * (1.0f - n.x * n.x * a) + y * b + z * n.x;
+    wo.y = sign * ( y * (n.y * n.y * a - 1.0f) - x * b) +  + z * n.y;
+    wo.z = sign * x * n.x - y * n.y + z * n.z;
+
+    return wo;
+}
+
+//not used
+/*
 float FresnelShlick(float f0, float nDotWi)
 {
     return f0 + (1.0f - f0) * pow(1.0f - nDotWi, 5.0f);
 }
+*/
 
-float3 SampleDiffuse(float3 wo, float3* wi, float* pdf, float3 texcoord, float3 normal, const __global Material* material, unsigned int* seed)
+float3 SampleDiffuse(float3 wo, float3* wi, float* pdf1, float3 texcoord, float3 normal, const __global Material* material, unsigned int* seed)
 {
     *wi = SampleHemisphereCosine(normal, seed);
-    *pdf = dot(*wi, normal) * INV_PI;
+    // *pdf = dot(*wi, normal) * INV_PI;
+	*pdf1 = PI / dot(*wi, normal);
 
+	//checker texture
     float3 albedo = (sin(texcoord.x * 64) > 0) * (sin(texcoord.y * 64) > 0) + (sin(texcoord.x * 64 + PI) > 0) * (sin(texcoord.y * 64 + PI) > 0) * 2.0f;
     return albedo * material->diffuse * INV_PI;
 }
 
-//#define BLINN
-float3 SampleSpecular(float3 wo, float3* wi, float* pdf, float3 normal, const __global Material* material, unsigned int* seed)
+float3 SampleDiffuse2(float3 wo, float3* wi, float* pdf1, float3 texcoord, float3 normal, const __global Material* material, unsigned int* seed)
 {
-#ifdef BLINN
-    float alpha = 2.0f / pow(material->roughness, 2.0f) - 2.0f;
-    float3 wh = SampleBlinn(normal, alpha, seed);
-#else
-    float alpha = material->roughness;
-    float cosTheta;
-    float3 wh = SampleGGX(normal, alpha, &cosTheta, seed);
-#endif
-        *wi = reflect(wo, wh);
-    if (dot(*wi, normal) * dot(wo, normal) < 0.0f) return 0.0f;
-#ifdef BLINN
-    float D = DistributionBlinn(normal, wh, alpha);
-#else
-    float D = DistributionGGX(cosTheta, alpha);
-#endif
-    *pdf = D * cosTheta / (4.0f * dot(wo, wh));
+    *wi = SampleHemisphereCosine(normal, seed);
+    // *pdf = dot(*wi, normal) * INV_PI;
+	*pdf1 = PI / dot(*wi, normal);
+
+	//checker texture
+    float3 albedo = (sin(texcoord.x * 64) > 0) * (sin(texcoord.y * 64) > 0) + (sin(texcoord.x * 64 + PI) > 0) * (sin(texcoord.y * 64 + PI) > 0) * 2.0f;
+    return albedo * material->diffuse * INV_PI_PI;
+}
+
+float3 SampleSpecular(float3 wo, float3* wi, float* pdf1, float3 normal, const __global Material* material, unsigned int* seed)
+{
+    float cosTheta, cosTheta2;
+	
+    float alpha2 = material->roughness*material->roughness -1.0f;
+    float3 wh = SampleGGX1(normal, alpha2, &cosTheta, &cosTheta2, seed);
+	
+	float dott = dot(wo, wh);
+	dott += dott;
+    *wi = //reflect(wo, wh, dott); 
+		-wo + dott * wh;
+	float dots = dot(*wi, normal) * dot(wo, normal); 
+    if (dots < 0.0f) return 0.0f;
+	
+    float D = DistributionGGX1(cosTheta2, alpha2);
+	
+    //*pdf = D * cosTheta / (4.0f * dott);
+    *pdf1 = (dott + dott) / (D * cosTheta);
+	
     // Actually, _material->ior_ isn't ior value, this is f0 value for now
-    return D / (4.0f * dot(*wi, normal) * dot(wo, normal)) * material->specular;
+    return D / (dots + dots + dots + dots) * material->specular;
+}
+
+float3 SampleSpecular2(float3 wo, float3* wi, float* pdf1, float3 normal, const __global Material* material, unsigned int* seed)
+{
+    float cosTheta, cosTheta2;
+	
+    float alpha2 = material->roughness*material->roughness -1.0f;
+    float3 wh = SampleGGX1(normal, alpha2, &cosTheta, &cosTheta2, seed);
+	
+	float dott = dot(wo, wh);
+	dott += dott;
+    *wi = //reflect(wo, wh, dott); 
+		-wo + dott * wh;
+	float dots = dot(*wi, normal) * dot(wo, normal); 
+    if (dots < 0.0f) return 0.0f;
+	
+    float D = DistributionGGX1(cosTheta2, alpha2);
+	
+    //*pdf = D * cosTheta / (4.0f * dott);
+    *pdf1 = (dott + dott) / (D * cosTheta);
+	
+    // Actually, _material->ior_ isn't ior value, this is f0 value for now
+    return D / (dots + dots) * material->specular;
 }
 
 float3 SampleBrdf(float3 wo, float3* wi, float* pdf, float3 texcoord, float3 normal, const __global Material* material, unsigned int* seed)
 {
-    bool doSpecular = dot(material->specular, (float3)(1.0f, 1.0f, 1.0f)) > 0.0f;
-    bool doDiffuse = dot(material->diffuse, (float3)(1.0f, 1.0f, 1.0f)) > 0.0f;
+    bool doSpecular = (material->specular.x + material->specular.y + material->specular.z) > 0.0f;
+    bool doDiffuse =  (material->diffuse.x + material->diffuse.y + material->diffuse.z) > 0.0f;
 
     if (doSpecular && !doDiffuse)
     {
@@ -407,11 +525,11 @@ float3 SampleBrdf(float3 wo, float3* wi, float* pdf, float3 texcoord, float3 nor
     {
         if (GetRandomFloat(seed) > 0.5f)
         {
-            return SampleSpecular(wo, wi, pdf, normal, material, seed) * 2.0f;
+            return SampleSpecular2(wo, wi, pdf, normal, material, seed);
         }
         else
         {
-            return SampleDiffuse(wo, wi, pdf, texcoord, normal, material, seed) * 2.0f;
+            return SampleDiffuse2(wo, wi, pdf, texcoord, normal, material, seed);
         }
     }
     else
@@ -421,18 +539,21 @@ float3 SampleBrdf(float3 wo, float3* wi, float* pdf, float3 texcoord, float3 nor
 
 }
 
-float3 Render(Ray* ray, const Scene* scene, unsigned int* seed, __read_only image2d_t tex)
+float3 RenderPT(Ray* ray, const Scene* scene, unsigned int* seed, __read_only image2d_t tex)
 {
     float3 radiance = 0.0f;
     float3 beta = 1.0f;
+	
+	int rrDepth = 8;
+	int minDepth = 5;
             
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i<rrDepth ; ++i)
     {
         IntersectData isect = Intersect(ray, scene);
 
         if (!isect.hit)
         {
-            float3 val = beta * max(SampleSky(tex, ray->dir), 0.0f);
+            float3 val = beta * SampleSky(tex, ray->dir);
             radiance += val;
             break;
         }
@@ -446,10 +567,19 @@ float3 Render(Ray* ray, const Scene* scene, unsigned int* seed, __read_only imag
         float3 f = SampleBrdf(wo, &wi, &pdf, isect.texcoord, isect.normal, material, seed);
         if (pdf <= 0.0f) break;
 
-        float3 mul = f * dot(wi, isect.normal) / pdf;
+		//был /
+        float3 mul = f * dot(wi, isect.normal) * pdf;
         beta *= mul;
         *ray = InitRay(isect.pos + wi * 0.01f, wi);
-
+		
+		if (i >= minDepth) {
+				// Randomly terminate a path with a probability inversely equal to the max reflection
+				float p = max(radiance.x, max(radiance.y, radiance.z));
+				if (GetRandomFloat(seed) > p)
+					break;
+				
+				radiance /= p;
+		}
     }
     
     return max(radiance, 0.0f);
@@ -466,21 +596,20 @@ float2 PointInHexagon(unsigned int* seed)
     return (float2)(p1 * v1.x + p2 * v2.x, p1 * v1.y + p2 * v2.y);
 }
 
-Ray CreateRay(uint width, uint height, float3 cameraPos, float3 cameraFront, float3 cameraUp, unsigned int* seed)
+
+
+
+Ray CreateRay(float3 cameraPos, float3 cameraFront, float3 cameraUp, float3 cameraX, float4 extra_data, unsigned int* seed)
 {
-    float invWidth = 1.0f / (float)(width), invHeight = 1.0f / (float)(height);
-    float aspectratio = (float)(width) / (float)(height);
-    float fov = 45.0f * 3.1415f / 180.0f;
-    float angle = tan(0.5f * fov);
+    float x = (float)(get_global_id(0) % (uint)(1.0f / extra_data.x)) + GetRandomFloat(seed) - 0.5f;
+    float y = (float)(get_global_id(0) * extra_data.x) + GetRandomFloat(seed) - 0.5f;
 
-    float x = (float)(get_global_id(0) % width) + GetRandomFloat(seed) - 0.5f;
-    float y = (float)(get_global_id(0) / width) + GetRandomFloat(seed) - 0.5f;
+    x = ( ((x + x + 1.0f) * extra_data.x) - 1) * extra_data.w;
+    y = ( ((y + y + 1.0f) * extra_data.y) - 1) * extra_data.z;
 
-    x = (2.0f * ((x + 0.5f) * invWidth) - 1) * angle * aspectratio;
-    y = -(1.0f - 2.0f * ((y + 0.5f) * invHeight)) * angle;
-
-    float3 dir = normalize(x * cross(cameraFront, cameraUp) + y * cameraUp + cameraFront);
-
+    float3 dir = // normalize
+	(x * cameraX + y * cameraUp + cameraFront);
+	/*
     // Simple Depth of Field
     float3 pointAimed = cameraPos + 60.0f * dir;
     //float2 dofDir = (float2)(GetRandomFloat(seed), GetRandomFloat(seed));
@@ -490,15 +619,18 @@ Ray CreateRay(uint width, uint height, float3 cameraPos, float3 cameraFront, flo
     float3 newPos = cameraPos + dofDir.x * r * cross(cameraFront, cameraUp) + dofDir.y * r * cameraUp;
     
     return InitRay(newPos, normalize(pointAimed - newPos));
-    //return InitRay(cameraPos, dir);
+	*/
+    return InitRay(cameraPos, dir);
 }
 
 #define GAMMA_CORRECTION
+#define ONE_GAMMA 0.45454545454f
 
 float3 ToGamma(float3 value)
 {
 #ifdef GAMMA_CORRECTION
-    return pow(value, 1.0f / 2.2f);
+    //return pow(value, 1.0f / 2.2f);
+    return native_powr(value, ONE_GAMMA);
 #else
     return value;
 #endif
@@ -507,7 +639,7 @@ float3 ToGamma(float3 value)
 float3 FromGamma(float3 value)
 {
 #ifdef GAMMA_CORRECTION
-    return pow(value, 2.2f);
+    return native_powr(value, 2.2f);
 #else
     return value;
 #endif
@@ -526,6 +658,8 @@ __kernel void KernelEntry
     float3 cameraPos,
     float3 cameraFront,
     float3 cameraUp,
+    float3 cameraX,
+    float4 extra_data,
     unsigned int frameCount,
     unsigned int frameSeed,
     __read_only image2d_t tex
@@ -535,8 +669,8 @@ __kernel void KernelEntry
 
     unsigned int seed = get_global_id(0) + HashUInt32(frameCount);
     
-    Ray ray = CreateRay(width, height, cameraPos, cameraFront, cameraUp, &seed);
-    float3 radiance = Render(&ray, &scene, &seed, tex);
+    Ray ray = CreateRay(cameraPos, cameraFront, cameraUp, cameraX, extra_data, &seed);
+    float3 radiance = RenderPT(&ray, &scene, &seed, tex);
         
     if (frameCount == 0)
     {

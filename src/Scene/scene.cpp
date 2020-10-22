@@ -65,11 +65,7 @@ void Scene::LoadTriangles(const char* filename)
     strncpy(mtlname, filename, strlen(filename) - 4);
     strcat(mtlname, ".mtl");
 
-    LoadMaterials(mtlname);
-
-    std::vector<float3> positions;
-    std::vector<float3> normals;
-    std::vector<float2> texcoords;
+    LoadMaterials(mtlname);	
 
     Material currentMaterial;
 
@@ -80,7 +76,7 @@ void Scene::LoadTriangles(const char* filename)
     FILE* file = fopen(filename, "r");
     if (!file)
     {
-        throw std::exception("Failed to open scene file!");
+        throw std::runtime_error("Failed to open scene file!");
     }
     
     unsigned int materialIndex = -1;
@@ -131,19 +127,43 @@ void Scene::LoadTriangles(const char* filename)
             int count = fscanf(file, "%d/%d/%d %d/%d/%d %d/%d/%d\n", &iv[0], &it[0], &in[0], &iv[1], &it[1], &in[1], &iv[2], &it[2], &in[2]);
             if (count != 9)
             {
-                throw std::exception("Failed to load face!");
+                throw std::runtime_error("Failed to load face!");
             }
+			
+			
+			ivs.push_back(iv[0] - 1);
+			ivs.push_back(iv[1] - 1);
+			ivs.push_back(iv[2] - 1);
+			
+			its.push_back(it[0] - 1);
+			its.push_back(it[1] - 1);
+			its.push_back(it[2] - 1);
+			
+			ins.push_back(in[0] - 1);
+			ins.push_back(in[1] - 1);
+			ins.push_back(in[2] - 1);
+			
+			Vertex v1 = Vertex(positions[iv[0] - 1], texcoords[it[0] - 1], normals[in[0] - 1]);
+			//v1.iv = iv[0] - 1; v1.it = it[0] - 1; v1.in = in[0] - 1;
+			Vertex v2 = Vertex(positions[iv[1] - 1], texcoords[it[1] - 1], normals[in[1] - 1]);
+			//v2.iv = iv[1] - 1; v2.it = it[1] - 1; v2.in = in[1] - 1;
+			Vertex v3 = Vertex(positions[iv[2] - 1], texcoords[it[2] - 1], normals[in[2] - 1]);
+			//v3.iv = iv[2] - 1; v3.it = it[2] - 1; v3.in = in[2] - 1;
+			
+			//tigra: лучше отдельно сохранять positions, texcoords, nornals
+			//tigra: в Vertex хранить только индексы
             m_Triangles.push_back(Triangle(
-                Vertex(positions[iv[0] - 1], texcoords[it[0] - 1], normals[in[0] - 1]),
-                Vertex(positions[iv[1] - 1], texcoords[it[1] - 1], normals[in[1] - 1]),
-                Vertex(positions[iv[2] - 1], texcoords[it[2] - 1], normals[in[2] - 1]),
+                v1,
+                v2,
+                v3,
                 materialIndex
                 ));
         }
     }
     
     std::cout << "Load succesful (" << m_Triangles.size() << " triangles, " << render->GetCurtime() - startTime << "s elapsed)" << std::endl;
-
+	printf("positions %d, texcoords %d, normals %d\n", positions.size(), texcoords.size(), normals.size());
+	printf("indexes %d\n", ivs.size());
 }
 
 void Scene::LoadMaterials(const char* filename)
@@ -151,7 +171,7 @@ void Scene::LoadMaterials(const char* filename)
     FILE* file = fopen(filename, "r");
     if (!file)
     {
-        throw std::exception("Failed to open material file!");
+        throw std::runtime_error("Failed to open material file!");
     }
     
     while (true)
@@ -404,6 +424,14 @@ BVHScene::BVHScene(const char* filename, unsigned int maxPrimitivesInNode)
     std::vector<Triangle> orderedTriangles;
     m_Root = RecursiveBuild(primitiveInfo, 0, m_Triangles.size(), &totalNodes, orderedTriangles);
     m_Triangles.swap(orderedTriangles);
+	
+	printf("sz Triangle=%d, Vertex %d, uint %d, float3 %d, float %d\n", sizeof(Triangle), sizeof(Vertex), sizeof(unsigned int), sizeof(float3), sizeof(float));
+	printf("sz Triangles %.2fMb\n", float(m_Triangles.size() * sizeof(Triangle)) / (1024.0f * 1024.0f) );
+	printf("sz positions %.2fMb\n", float(positions.size() * sizeof(float3)) / (1024.0f * 1024.0f) );
+	printf("sz texcoords %.2fMb\n", float(texcoords.size() * sizeof(float3)) / (1024.0f * 1024.0f) );
+	printf("sz normals %.2fMb\n", float(normals.size() * sizeof(float3)) / (1024.0f * 1024.0f) );
+	printf("sz indexes %.2fMb\n", float(ivs.size() * sizeof(unsigned int)) / (1024.0f * 1024.0f) );
+	printf("sz 3x indexes %.2fMb\n", float(3*ivs.size() * sizeof(unsigned int)) / (1024.0f * 1024.0f) );
 
     //primitiveInfo.resize(0);
     std::cout << "BVH created with " << totalNodes << " nodes for " << m_Triangles.size()
@@ -567,6 +595,8 @@ BVHBuildNode* BVHScene::RecursiveBuild(
     {
         bounds = Union(bounds, primitiveInfo[i].bounds);
     }
+	
+	float bounds_SurfaceArea = 1.0f / bounds.SurfaceArea();
 
     unsigned int nPrimitives = end - start;
     if (nPrimitives == 1)
@@ -649,7 +679,7 @@ BVHBuildNode* BVHScene::RecursiveBuild(
                         b1 = Union(b1, buckets[j].bounds);
                         count1 += buckets[j].count;
                     }
-                    cost[i] = 1.0f + (count0 * b0.SurfaceArea() + count1 * b1.SurfaceArea()) / bounds.SurfaceArea();
+                    cost[i] = 1.0f + (count0 * b0.SurfaceArea() + count1 * b1.SurfaceArea()) * bounds_SurfaceArea;
                 }
 
                 // Find bucket to split at that minimizes SAH metric

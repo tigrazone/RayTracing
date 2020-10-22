@@ -47,7 +47,15 @@ typedef struct Vertex
     float3 position;
     float3 texcoord;
     float3 normal;
-    float3 tangent_s;
+    //float3 tangent_s;  //because not used
+	
+	/*
+	unsigned int iv;
+	unsigned int it;
+	unsigned int in;
+	*/
+	
+	//tigra: remix it with indexes position, texcoord, normal 
 
 } Vertex;
 
@@ -79,9 +87,10 @@ typedef struct Triangle
     }
 #endif
 
+	//tigra: save precalc vars
     Vertex v1, v2, v3;
     unsigned int mtlIndex;
-    unsigned int padding[3];
+    unsigned int padding[3]; //без padding падает при исполнении
 
 } Triangle;
 

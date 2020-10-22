@@ -4,6 +4,7 @@
 #include "mathlib/mathlib.hpp"
 #include "utils/viewport.hpp"
 #include <memory>
+#include <ctime>
 
 class Camera
 {
@@ -17,6 +18,7 @@ public:
 
     bool IsChanged()        const { return m_Changed; }
     unsigned int GetFrameCount() const { return m_FrameCount; }
+	clock_t time0;
 
 private:
     std::shared_ptr<Viewport> m_Viewport;

@@ -25,7 +25,15 @@ protected:
     std::vector<Triangle> m_Triangles;
     std::vector<Material> m_Materials;
     cl::Buffer m_TriangleBuffer;
-    cl::Buffer m_MaterialBuffer;
+    cl::Buffer m_MaterialBuffer;	
+
+    std::vector<float3> positions;
+    std::vector<float3> normals;
+    std::vector<float2> texcoords;
+	
+	std::vector<unsigned int> ivs;
+    std::vector<unsigned int> its;
+    std::vector<unsigned int> ins;
 
 };
 

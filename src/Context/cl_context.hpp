@@ -19,6 +19,8 @@ enum class RenderKernelArgument_t : unsigned int
     CAM_ORIGIN,
     CAM_FRONT,
     CAM_UP,
+    CAM_X,
+    CAM_EXTRA_DATA,
     FRAME_COUNT,
     FRAME_SEED,
     TEXTURE0,

@@ -3,6 +3,8 @@
 #include "utils/cl_exception.hpp"
 #include <Windows.h>
 
+#include <time.h>
+
 #define WINDOW_CLASS "WindowClass1"
 #define WINDOW_TITLE "Ray Tracing"
 
@@ -82,17 +84,21 @@ HWND InitMainWindow()
 int main()
 {
     HWND hwnd = InitMainWindow();
+	
+	clock_t time0, time1;
+	char str[1000];
+	unsigned int frames;
 
     try
     {
         render->Init(hwnd);
     }
-    catch (std::exception& ex)
+    catch (std::runtime_error& ex)
     {
-        std::cerr << "Caught exception: " << ex.what() << std::endl;
+        std::cerr << "98 Caught exception: " << ex.what() << std::endl;
         return 0;
     }
-
+	
     MSG msg = { 0 };
     while (msg.message != WM_QUIT)
     {
@@ -106,12 +112,20 @@ int main()
         {
             render->RenderFrame();
         }
-        catch (const std::exception& ex)
+        catch (const std::runtime_error& ex)
         {
-            std::cerr << "Caught exception: " << ex.what() << std::endl;
+            std::cerr << "117 Caught exception: " << ex.what() << std::endl;
             system("PAUSE");
             return 0;
         }
+
+		time0 = render->m_Camera->time0;
+		time1 = clock();
+		frames = render->m_Camera->GetFrameCount();
+		
+		sprintf(str, "passes: %d  time: %.2fs   %.2f fps  %d ms per pass", frames, (float(time1-time0)/float(CLOCKS_PER_SEC)), float(frames)/(float(time1-time0)/float(CLOCKS_PER_SEC)), (int) (render->GetDeltaTime()*1000));
+		
+		SetWindowTextA(hwnd, str);
         
     }
 

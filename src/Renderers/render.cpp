@@ -157,7 +157,7 @@ void Render::Init(HWND hwnd)
     cl::Platform::get(&all_platforms);
     if (all_platforms.empty())
     {
-        throw std::exception("No OpenCL platforms found");
+        throw std::runtime_error("No OpenCL platforms found");
     }
     
     m_CLContext = std::make_shared<CLContext>(all_platforms[0]);
@@ -195,7 +195,11 @@ void Render::SetupBuffers()
     imageFormat.image_channel_order = CL_RGBA;
     imageFormat.image_channel_data_type = CL_FLOAT;
 
-    HDRLoader::Load("textures/Topanga_Forest_B_3k.hdr", image);
+    HDRLoader::Load("textures/octane_studio6.hdr", image);
+    //HDRLoader::Load("c:/ccc/edxray-oct18-updated/EDXRay/media/Barce_Rooftop_C_3k.hdr", image);
+    //HDRLoader::Load("c:/ccc/edxray-oct18-updated/EDXRay/media/1Barce_Rooftop_C_3k.hdr", image, 0.01f);
+    //HDRLoader::Load("textures/Topanga_Forest_B_3k.hdr", image);
+    //HDRLoader::Load("textures/CGSkies_0036_free.hdr", image);
     //HDRLoader::Load("textures/studio.hdr", image);
 
     m_Texture0 = cl::Image2D(GetCLContext()->GetContext(), CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, imageFormat, image.width, image.height, 0, image.colors, &errCode);
@@ -281,7 +285,8 @@ void Render::RenderFrame()
     GetCLContext()->Finish();
 
     glDrawPixels(m_Viewport->width, m_Viewport->height, GL_RGBA, GL_FLOAT, m_Viewport->pixels);
-        
+      
+	/*  
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluPerspective(90.0, 1280.0 / 720.0, 1, 1024);
@@ -291,7 +296,8 @@ void Render::RenderFrame()
     float3 center = m_Camera->GetFrontVector() + eye;
     gluLookAt(eye.x, eye.y, eye.z, center.x, center.y, center.z, m_Camera->GetUpVector().x, m_Camera->GetUpVector().y, m_Camera->GetUpVector().z);
 
-    //m_Scene->DrawDebug();
+    m_Scene->DrawDebug();
+	*/
 
     glFinish();
 

@@ -14,6 +14,16 @@ const float MATH_1DIV2PI = 0.159154943f;
 const float MATH_PIDIV2 = 1.570796327f;
 const float MATH_PIDIV4 = 0.785398163f;
 
+
+class float4
+{
+public:
+    float4(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
+    
+public:
+    float x, y, z, w;
+};
+
 class float3
 {
 public:

@@ -7,6 +7,7 @@ from http://www.flipcode.com/archives/HDR_Image_Reader.shtml
 ************************************************************************************/
 
 #include "image_loader.hpp"
+#include <cstring>
 
 #define _CRT_SECURE_NO_WARNINGS
 #include <cmath>
@@ -26,7 +27,7 @@ static void WorkOnRGBE(RGBE *scan, int len, float *cols);
 static bool Decrunch(RGBE *scanline, int len, FILE *file);
 static bool OldDecrunch(RGBE *scanline, int len, FILE *file);
 
-bool HDRLoader::Load(const char *fileName, Image &res)
+bool HDRLoader::Load(const char *fileName, Image &res, float scale=1.0f)
 {
     int i;
     char str[200];
@@ -90,6 +91,9 @@ bool HDRLoader::Load(const char *fileName, Image &res)
         if (Decrunch(scanline, w, file) == false)
             break;
         WorkOnRGBE(scanline, w, cols);
+		cols[0] *= scale;
+		cols[1] *= scale;
+		cols[2] *= scale;
         cols += w * 4;
     }
 
@@ -102,7 +106,7 @@ bool HDRLoader::Load(const char *fileName, Image &res)
 float ConvertComponent(int expo, int val)
 {
     float v = val / 256.0f;
-    float d = std::powf(2.0f, expo);
+    float d = std::pow(2.0f, expo);
     return v * d;
 }
 
